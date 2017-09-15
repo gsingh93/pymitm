@@ -72,17 +72,18 @@ def main():
         logger.info('Successfully connected to server')
         logger.debug('Local address: %s:%s' % server_sock.getsockname())
 
-        open_socks = [client_sock, server_sock]
-        while len(open_socks) != 0:
-            readable, _, _ = select.select(open_socks, [], [], 3)
+        connected = True
+        while connected:
+            readable, _, _ = select.select([client_sock, server_sock], [], [], 3)
             logger.debug('Readable sockets: ' + str(readable))
             for s in readable:
                 if s is client_sock:
                     data = s.recv(1024)
                     if data == b'':
                         logger.info('Client disconnected')
-                        open_socks.remove(client_sock)
-                        server_sock.close()
+                        # TODO: Handle server data after disconnect
+                        client_sock.close()
+                        connected = False
                     else:
                         logger.info('C -> S: ' + repr(data))
                         server_sock.send(data)
@@ -91,10 +92,16 @@ def main():
                     data = s.recv(1024)
                     if data == b'':
                         logger.info('Server disconnected')
-                        open_socks.remove(server_sock)
+                        # TODO: Handle client data after disconnect
+                        server_sock.close()
+                        connected = False
                     else:
                         logger.info('S -> C: ' + repr(data))
                         client_sock.send(data)
+
+        client_sock.close()
+        server_sock.close()
+
 
 if __name__ == '__main__':
     main()
