@@ -2,6 +2,7 @@
 
 import argparse
 import logging
+import multiprocessing
 import os
 import select
 import socket
@@ -61,6 +62,11 @@ def main():
     proxy_sock.listen(1)
     logger.info('Successfully started proxy socket')
 
+    logger.info('Starting connection handler thread')
+    q = multiprocessing.Queue()
+    p = multiprocessing.Process(target=handle_connections, args=(q,))
+    p.start()
+
     while True:
         client_sock, addr = proxy_sock.accept()
         logger.info('Accepted connection from client %s:%d', addr[0], addr[1])
@@ -79,35 +85,56 @@ def main():
         local_ip, local_port = server_sock.getsockname()
         logger.debug('Local address: %s:%s', local_ip, local_port)
 
-        connected = True
-        while connected:
-            readable, _, _ = select.select([client_sock, server_sock], [], [], 3)
-            logger.debug('Readable sockets: %s', str(readable))
-            for s in readable:
-                if s is client_sock:
-                    data = s.recv(1024)
-                    if data == b'':
-                        logger.info('Client disconnected')
-                        # TODO: Handle server data after disconnect
-                        client_sock.close()
-                        connected = False
-                    else:
-                        logger.info('C -> S: %s', repr(data))
-                        server_sock.send(data)
-                else:
-                    assert s is server_sock
-                    data = s.recv(1024)
-                    if data == b'':
-                        logger.info('Server disconnected')
-                        # TODO: Handle client data after disconnect
-                        server_sock.close()
-                        connected = False
-                    else:
-                        logger.info('S -> C: %s', repr(data))
-                        client_sock.send(data)
+        q.put([client_sock, server_sock])
 
-        client_sock.close()
-        server_sock.close()
+
+def handle_connections(q):
+    logger.info('Successfully started connection handler thread')
+    sockets = []
+    c2s = {}
+    s2c = {}
+    while True:
+        socks = None if q.empty() else q.get()
+        if socks:
+            if len(socks) != 2:
+                logger.error('Expected two sockets')
+            else:
+                sockets.extend(socks)
+                client_sock, server_sock = socks
+                c2s[client_sock] = server_sock
+                s2c[server_sock] = client_sock
+                logger.info('One new connection was added')
+
+        readable, _, _ = select.select(sockets, [], [], 3)
+        logger.debug('Readable sockets: %s', str(readable))
+        for s in readable:
+            if s in c2s:
+                client_sock = s
+                server_sock = c2s[client_sock]
+                data = s.recv(1024)
+                if data == b'':
+                    logger.info('Client disconnected')
+                    # TODO: Handle server data after disconnect
+                    client_sock.close()
+                    del c2s[client_sock]
+                    sockets.remove(client_sock)
+                else:
+                    logger.info('C -> S: %s', repr(data))
+                    server_sock.send(data)
+            else:
+                assert s in s2c
+                server_sock = s
+                client_sock = s2c[server_sock]
+                data = s.recv(1024)
+                if data == b'':
+                    logger.info('Server disconnected')
+                    # TODO: Handle client data after disconnect
+                    server_sock.close()
+                    del s2c[server_sock]
+                    sockets.remove(server_sock)
+                else:
+                    logger.info('S -> C: %s', repr(data))
+                    client_sock.send(data)
 
 
 if __name__ == '__main__':
