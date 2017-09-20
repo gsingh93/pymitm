@@ -35,11 +35,16 @@ def parse_arguments():
         help='The port to listen on for packets',
     )
     parser.add_argument(
+        '--interface', '-i', default='127.0.0.1',
+        help='The interface IP to listen on. Use 0.0.0.0 for all interfaces',
+    )
+    parser.add_argument(
         '--server', '-s',
         help=(
             'Force the destination server to be this address. The format for ' +
             'argument is "server:port", where "server" can be either an IP ' +
-            'address or a domain. This option is used for testing'),
+            'address or a domain. This option is used for testing'
+        ),
     )
     return parser.parse_args()
 
@@ -48,10 +53,11 @@ def main():
     args = parse_arguments()
     logger.debug(args)
 
-    logger.info('Starting proxy socket on localhost:%d' % args.port)
+    # TODO: Validate interface and port
+    logger.info('Starting proxy socket on %s:%d' % (args.interface, args.port))
     proxy_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     proxy_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    proxy_sock.bind(('localhost', args.port))
+    proxy_sock.bind((args.interface, args.port))
     proxy_sock.listen(1)
     logger.info('Successfully started proxy socket')
 
