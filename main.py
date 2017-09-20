@@ -54,7 +54,7 @@ def main():
     logger.debug(args)
 
     # TODO: Validate interface and port
-    logger.info('Starting proxy socket on %s:%d' % (args.interface, args.port))
+    logger.info('Starting proxy socket on %s:%d', args.interface, args.port)
     proxy_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     proxy_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     proxy_sock.bind((args.interface, args.port))
@@ -63,7 +63,7 @@ def main():
 
     while True:
         client_sock, addr = proxy_sock.accept()
-        logger.info('Accepted connection from client %s:%d' % (addr[0], addr[1]))
+        logger.info('Accepted connection from client %s:%d', addr[0], addr[1])
 
         if args.server:
             dst_addr, dst_port = args.server.split(':')
@@ -73,15 +73,16 @@ def main():
             _, dst_port = struct.unpack('!HH', sockaddr_in[:4])
             dst_addr = socket.inet_ntoa(sockaddr_in[4:8])
 
-        logger.info('Connecting to original destination server %s:%d' % (dst_addr, dst_port))
+        logger.info('Connecting to original destination server %s:%d', dst_addr, dst_port)
         server_sock = socket.create_connection((dst_addr, dst_port))
         logger.info('Successfully connected to server')
-        logger.debug('Local address: %s:%s' % server_sock.getsockname())
+        local_ip, local_port = server_sock.getsockname()
+        logger.debug('Local address: %s:%s', local_ip, local_port)
 
         connected = True
         while connected:
             readable, _, _ = select.select([client_sock, server_sock], [], [], 3)
-            logger.debug('Readable sockets: ' + str(readable))
+            logger.debug('Readable sockets: %s', str(readable))
             for s in readable:
                 if s is client_sock:
                     data = s.recv(1024)
@@ -91,7 +92,7 @@ def main():
                         client_sock.close()
                         connected = False
                     else:
-                        logger.info('C -> S: ' + repr(data))
+                        logger.info('C -> S: %s', repr(data))
                         server_sock.send(data)
                 else:
                     assert s is server_sock
@@ -102,7 +103,7 @@ def main():
                         server_sock.close()
                         connected = False
                     else:
-                        logger.info('S -> C: ' + repr(data))
+                        logger.info('S -> C: %s', repr(data))
                         client_sock.send(data)
 
         client_sock.close()
